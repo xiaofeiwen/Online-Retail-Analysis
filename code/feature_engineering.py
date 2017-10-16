@@ -33,10 +33,16 @@ products.set_index('product_id', drop=False, inplace=True)
 products.fillna(0,inplace=True)
 
 # user features
+prior_order_size = priors.groupby('order_id').size().reset_index()
+prior_order_size.columns = ['order_id','order_size']
+prior_order_size = orders.merge(prior_order_size,on='order_id')
 usr = pd.DataFrame()
 usr['average_days_between_orders'] = orders.groupby('user_id')['days_since_prior_order'].mean()
 usr['sum_days_between_orders'] = orders.groupby('user_id')['days_since_prior_order'].sum()
 usr['nb_orders'] = orders.groupby('user_id')['order_number'].max()
+usr['order_size_mean'] = prior_order_size.groupby('user_id')['order_size'].mean()
+usr['order_size_std'] = prior_order_size.groupby('user_id')['order_size'].std()
+usr['order_size_max'] = prior_order_size.groupby('user_id')['order_size'].max()
 
 users = pd.DataFrame()
 users['total_items'] = priors_orders.groupby('user_id').size()
@@ -48,7 +54,6 @@ users['avg_money_spent_per_item'] = users['total_money_spent'] / users['total_it
 users['user_reorder_ratio'] = priors_orders.groupby('user_id')['reordered'].sum().\
                               divide(priors_orders.groupby('user_id')['order_number'].agg(lambda x: sum(x>1)))
 users = users.join(usr)
-users['average_basket'] = (users.total_items / users.nb_orders).astype(np.float32)
 
 # user-prodcut interaction features
 priors_orders['user_product'] = priors_orders.product_id + priors_orders.user_id * 100000
@@ -102,7 +107,9 @@ df['user_total_orders'] = df.user_id.map(users.nb_orders)
 df['user_total_items'] = df.user_id.map(users.total_items)
 df['total_distinct_items'] = df.user_id.map(users.total_distinct_items)
 df['user_average_days_between_orders'] = df.user_id.map(users.average_days_between_orders)
-df['user_average_basket'] =  df.user_id.map(users.average_basket)
+df['user_order_size_mean'] =  df.user_id.map(users.order_size_mean)
+df['user_order_size_std'] =  df.user_id.map(users.order_size_std)
+df['user_order_size_max'] =  df.user_id.map(users.order_size_max)
 df['user_total_item_quantity'] = df.user_id.map(users.total_item_quantity)
 df['user_total_spent'] = df.user_id.map(users.total_money_spent)
 df['user_sum_days_between_orders'] = df.user_id.map(users.sum_days_between_orders)
