@@ -14,6 +14,7 @@ train = order_products[order_products.eval_set == 'train'].copy()
 test = order_products[order_products.eval_set == 'test'].copy()
 
 # product features
+print ('creating features...')
 priors['revenue'] = priors['unit_price'] * priors['quantity']
 priors_orders = orders.merge(priors, on='order_id')
 priors_orders.loc[:,'_user_buy_product_times'] = priors_orders.groupby(['user_id', 'product_id']).cumcount() + 1
@@ -85,6 +86,7 @@ userXproduct = userXproduct.join(up_temp)
 test_orders = orders[orders.eval_set == 'test']
 train_orders = orders[orders.eval_set == 'train']
 train.set_index(['order_id', 'product_id'], inplace=True, drop=False)
+orders.set_index('order_id',inplace=True)
 
 # data transformation
 order_list = []
@@ -98,75 +100,78 @@ for row in train_orders.itertuples():
     product_list += user_products
     order_list += [order_id] * len(user_products)
     labels += [(order_id, product) in last_orders for product in user_products]
-df = pd.DataFrame({'order_id':order_list, 'product_id':product_list, 'labels':labels}, dtype=np.int32)
+df_train = pd.DataFrame({'order_id':order_list, 'product_id':product_list, 'labels':labels},dtype=np.int32)
 
-orders.set_index('order_id',inplace=True)
-print('user related features')
-df['user_id'] = df.order_id.map(orders.user_id)
-df['user_total_orders'] = df.user_id.map(users.nb_orders)
-df['user_total_items'] = df.user_id.map(users.total_items)
-df['total_distinct_items'] = df.user_id.map(users.total_distinct_items)
-df['user_average_days_between_orders'] = df.user_id.map(users.average_days_between_orders)
-df['user_order_size_mean'] =  df.user_id.map(users.order_size_mean)
-df['user_order_size_std'] =  df.user_id.map(users.order_size_std)
-df['user_order_size_max'] =  df.user_id.map(users.order_size_max)
-df['user_total_item_quantity'] = df.user_id.map(users.total_item_quantity)
-df['user_total_spent'] = df.user_id.map(users.total_money_spent)
-df['user_sum_days_between_orders'] = df.user_id.map(users.sum_days_between_orders)
-df['user_reorder_ratio'] = df.user_id.map(users.user_reorder_ratio)
+order_list = []
+product_list = []
+labels = []
+last_orders = set(zip(test.order_id.values,test.product_id.values))
+for row in test_orders.itertuples():
+    order_id = row.order_id
+    user_id = row.user_id
+    user_products = list(products.product_id.values)
+    product_list += user_products
+    order_list += [order_id] * len(user_products)
+    # labels += [(order_id, product) in last_orders for product in user_products]
+df_test = pd.DataFrame({'order_id':order_list, 'product_id':product_list},dtype=np.int32)
+
+def data_transformation(df):
+    # print('user related features')
+    df['user_id'] = df.order_id.map(orders.user_id)
+    df['user_total_orders'] = df.user_id.map(users.nb_orders)
+    df['user_total_items'] = df.user_id.map(users.total_items)
+    df['user_total_distinct_items'] = df.user_id.map(users.total_distinct_items)
+    df['user_average_days_between_orders'] = df.user_id.map(users.average_days_between_orders)
+    df['user_order_size_mean'] =  df.user_id.map(users.order_size_mean)
+    df['user_order_size_std'] =  df.user_id.map(users.order_size_std)
+    df['user_order_size_max'] =  df.user_id.map(users.order_size_max)
+    df['user_total_item_quantity'] = df.user_id.map(users.total_item_quantity)
+    df['user_total_spent'] = df.user_id.map(users.total_money_spent)
+    df['user_sum_days_between_orders'] = df.user_id.map(users.sum_days_between_orders)
+    df['user_reorder_ratio'] = df.user_id.map(users.user_reorder_ratio)
 
 
-print('order related features')
-# df['dow'] = df.order_id.map(orders.order_dow)
-df['order_hour_of_day'] = df.order_id.map(orders.order_hour_of_day)
-df['order_dow'] = df.order_id.map(orders.order_dow)
-df['days_since_prior_order'] = df.order_id.map(orders.days_since_prior_order)
-df['days_since_ratio'] = df.days_since_prior_order / (df.user_average_days_between_orders+.01)
+    # print('order related features')
+    # df['dow'] = df.order_id.map(orders.order_dow)
+    df['order_hour_of_day'] = df.order_id.map(orders.order_hour_of_day)
+    df['order_dow'] = df.order_id.map(orders.order_dow)
+    df['days_since_prior_order'] = df.order_id.map(orders.days_since_prior_order)
+    df['days_since_ratio'] = df.days_since_prior_order / (df.user_average_days_between_orders+.01)
 
-print('product related features')
-df['product_orders'] = df.product_id.map(products.orders)
-df['product_reorders'] = df.product_id.map(products.reorders)
-df['product_reorder_rate'] = df.product_id.map(products.reorder_rate)
-df['product_total_quantity_sold'] = df.product_id.map(products.total_quantity)
-df['product_avg_price'] = df.product_id.map(products.avg_price)
-df['prod_first_buy'] = df.product_id.map(products.prod_first_buy)
-df['prod_second_buy'] = df.product_id.map(products.prod_second_buy)
-df['prod_1reorder_ratio'] = df.product_id.map(products.prod_1reorder_ratio)
-df['prod_nreorder_ratio'] = df.product_id.map(products.prod_nreorder_ratio)
+    # print('product related features')
+    df['product_orders'] = df.product_id.map(products.orders)
+    df['product_reorders'] = df.product_id.map(products.reorders)
+    df['product_reorder_rate'] = df.product_id.map(products.reorder_rate)
+    df['product_total_quantity_sold'] = df.product_id.map(products.total_quantity)
+    df['product_avg_price'] = df.product_id.map(products.avg_price)
+    df['prod_first_buy'] = df.product_id.map(products.prod_first_buy)
+    df['prod_second_buy'] = df.product_id.map(products.prod_second_buy)
+    df['prod_1reorder_ratio'] = df.product_id.map(products.prod_1reorder_ratio)
+    df['prod_nreorder_ratio'] = df.product_id.map(products.prod_nreorder_ratio)
 
-print('user_X_product related features')
-df['z'] = df.user_id * 100000 + df.product_id
-# df.drop(['user_id'], axis=1, inplace=True)
-df['UP_orders'] = df.z.map(userXproduct.nb_orders)
-df['UP_orders_ratio'] = df.UP_orders / df.user_total_orders
-# df['UP_last_order_id'] = df.z.map(userXproduct.last_order_id)
-# df['UP_average_pos_in_cart'] = df.z.map(userXproduct.sum_pos_in_cart) / df.UP_orders
-df['UP_reorder_rate'] = df.UP_orders / df.user_total_orders
-# df['UP_orders_since_last'] = df.user_total_orders - df.UP_last_order_id.map(orders.order_number)
-df['UP_total_quantity'] = df.z.map(userXproduct.up_total_quantity)
-df['UP_first_order_number'] = df.z.map(userXproduct.up_first_order_number)
-df['UP_order_rate_since_first_order'] = df.UP_orders / (df.user_total_orders - df.UP_first_order_number + 1)
+    # print('user_X_product related features')
+    df['z'] = df.user_id * 100000 + df.product_id
+    # df.drop(['user_id'], axis=1, inplace=True)
+    df['UP_orders'] = df.z.map(userXproduct.nb_orders)
+    df['UP_orders_ratio'] = df.UP_orders / df.user_total_orders
+    # df['UP_last_order_id'] = df.z.map(userXproduct.last_order_id)
+    # df['UP_average_pos_in_cart'] = df.z.map(userXproduct.sum_pos_in_cart) / df.UP_orders
+    df['UP_reorder_rate'] = df.UP_orders / df.user_total_orders
+    # df['UP_orders_since_last'] = df.user_total_orders - df.UP_last_order_id.map(orders.order_number)
+    df['UP_total_quantity'] = df.z.map(userXproduct.up_total_quantity)
+    df['UP_first_order_number'] = df.z.map(userXproduct.up_first_order_number)
+    df['UP_order_rate_since_first_order'] = df.UP_orders / (df.user_total_orders - df.UP_first_order_number + 1)
 
-df.drop(['z','UP_first_order_number'], axis=1, inplace=True)
-df.fillna(0,inplace=True)
+    df.drop(['z','UP_first_order_number'], axis=1, inplace=True)
+    df.fillna(0,inplace=True)
+    return df
 
+print ('transforming to df_train...')
+df_train = data_transformation(df_train)
+print ('transforming to df_test...')
+df_test = data_transformation(df_test)
 # save datadf.to_pickle('../data/train_transformed.p')
-df.to_pickle('../data/train_transformed.p')
+df_train.to_pickle('../data/train_transformed.p')
+df_test.to_pickle('../data/test_transformed.p')
 products.to_pickle('../data/product_features.p')
 users.to_pickle('../data/user_features.p')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
